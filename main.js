@@ -2,16 +2,15 @@ let mainOpts = {
 	moving: false,
 	propagateChance: 0.9,
 	gridSize: 10,
-	connectionAmount: 1,
-	multiConnections: false,
+	threadAmount: 1,
+	multiThreaded: false,
 	background: rgba(0, 0, 0, 1),
-	stroke: rgba(85, 85, 85, 1),
+	stroke: rgba(245, 245, 245, 1),
 	lineWidth: 4,
 	circles: "#ff7f3f",
 	intersections: rgba(150, 150, 150, 1),
 	evenOddFill: true,
-	randomColors: false,
-	jiggle: 0
+	randomColors: false
 }
 
 let hoveredRinger = null
@@ -20,14 +19,12 @@ let grabbedRinger = null
 let gui = new dat.GUI()
 gui.add(mainOpts, "propagateChance", 0, 1, 0.01).onChange(t => setup())
 gui.add(mainOpts, "gridSize", 1, 50, 1).onChange(t => setup())
-gui.add(mainOpts, "connectionAmount", 1, 10, 1).onChange(t => setup())
+gui.add(mainOpts, "threadAmount", 1, 10, 1).onChange(t => setup())
 gui.add(mainOpts, "moving")
 gui
-	.add(mainOpts, "multiConnections")
+	.add(mainOpts, "multiThreaded")
 	.onChange(t => setup())
-	.name("multiple lines per ring")
-
-gui.add(mainOpts, "jiggle", 0, 15, 0.5)
+	.name("multiple threads per ring")
 
 let colors = gui.addFolder("Colors")
 colors.addColor(mainOpts, "background")
@@ -39,11 +36,14 @@ colors.add(mainOpts, "evenOddFill")
 
 gui.add(window, "setup").name("Generate")
 
+/**
+ * The rings around which the threads run
+ */
 class Ringer {
 	constructor(opts) {
 		this.p = opts.p
 		this.rad = opts.rad
-		this.connections = 0
+		this.threads = 0
 		this.color = getRandomColor()
 		this.dir = this.p.angleTo(Vec2.middle())
 		this.angChange = rndFloat(0.01, 0.1) * rndSign()
@@ -55,9 +55,6 @@ class Ringer {
 			this.dir += this.angChange
 		}
 		let p = this.p.copy()
-		if (mainOpts.jiggle) {
-			p.addAngle(rndAng(), mainOpts.jiggle)
-		}
 		ct.fillStyle = mainOpts.randomColors ? this.color : mainOpts.circles
 		ct.lineWidth = 5
 		ct.beginPath()
@@ -68,7 +65,10 @@ class Ringer {
 	}
 }
 
-class Connection {
+/**
+ * These are the lines between the rings. Each Thread runs between n Ringers.
+ */
+class Thread {
 	constructor(opts) {
 		this.startRing = opts.startRing
 		this.ringers = [this.startRing]
@@ -78,27 +78,28 @@ class Connection {
 		return this.ringers.indexOf(ringer) >= 0
 	}
 	propagate() {
+		//Recursively add ringers to this Thread
 		let pool = ringers.filter(ringer => !this.containsRinger(ringer))
 
-		if (!mainOpts.multiConnections) {
+		if (!mainOpts.multiThreaded) {
 			pool = pool.filter(
 				ringer =>
-					connections.find(connection => connection.containsRinger(ringer)) ==
-					undefined
+					threads.find(thread => thread.containsRinger(ringer)) == undefined
 			)
 		}
 
 		if (pool.length) {
 			let next = rndArr(pool)
 			this.ringers.push(next)
-			next.connections++
+			next.threads++
 			if (rndFloat() < mainOpts.propagateChance) {
 				this.propagate()
 			}
 		}
 	}
-	getConnectionPoints() {
+	getThreadPoints() {
 		return this.ringers.slice(0, this.ringers.length - 1).map((ringer, i) => {
+			//For each pair of ringers we return two points that lie on the edge of each respective ringer.
 			let ringer0 = ringer
 			let ringer1 = this.ringers[i + 1]
 			let ang = ringer0.p.angleTo(ringer1.p)
@@ -108,23 +109,36 @@ class Connection {
 		})
 	}
 	renderFills(ct) {
-		ct.lineWidth = 5
+		ct.lineWidth = mainOpts.lineWidth
 		ct.fillStyle = mainOpts.intersections
 		ct.strokeStyle = mainOpts.stroke
-		let pts = this.getConnectionPoints()
+		let pts = this.getThreadPoints()
+		//Make a path through all points and fill
 		if (pts.length) {
 			ct.beginPath()
 
 			pts[0][0].moveTo(ct)
 			pts.flatMap(ptPair => ptPair).forEach(pt => pt.lineTo(ct))
+
+			//Make the background fill also extend to the edge of the circle. Otherwise it looks weird.
+			if (this.ringers.length > 1) {
+				let firstR = this.ringers[0]
+				let lastR = this.ringers[this.ringers.length - 1]
+
+				let ang = lastR.p.angleTo(firstR.p)
+				let p0 = lastR.p.copy().addAngle(ang + PI05, lastR.rad)
+				let p1 = firstR.p.copy().addAngle(ang + PI05, firstR.rad)
+				p0.lineTo(ct)
+				p1.lineTo(ct)
+			}
 			ct.fill(mainOpts.evenOddFill ? "evenodd" : "nonzero")
 			ct.closePath()
 		}
 	}
 	render(ct) {
-		ct.lineWidth = 5
+		ct.lineWidth = mainOpts.lineWidth
 		ct.strokeStyle = mainOpts.stroke
-		let pts = this.getConnectionPoints()
+		let pts = this.getThreadPoints()
 		pts.forEach(ptPair => {
 			ct.beginPath()
 			ptPair[0].moveTo(ct)
@@ -136,11 +150,12 @@ class Connection {
 }
 
 let ringers = []
-let connections = []
+let threads = []
 function setup() {
 	ringers = []
-	connections = []
+	threads = []
 	let dim = mainOpts.gridSize
+	//First we generate some ringers in a grid
 	for (let i = 0; i < dim; i++) {
 		for (let j = 0; j < dim; j++) {
 			ringers.push(
@@ -155,8 +170,9 @@ function setup() {
 		}
 	}
 
-	for (let i = 0; i < mainOpts.connectionAmount; i++) {
-		connections.push(new Connection({ startRing: rndArr(ringers) }))
+	//Now we create threads that run around those ringers
+	for (let i = 0; i < mainOpts.threadAmount; i++) {
+		threads.push(new Thread({ startRing: rndArr(ringers) }))
 	}
 	paused = false
 }
@@ -169,9 +185,13 @@ function render() {
 	c.clearRect(0, 0, width, height)
 	c.fillStyle = mainOpts.background
 	c.fillRect(0, 0, width, height)
-	connections.forEach(connections => connections.renderFills(c))
+
+	//draw the fill between the threads
+	threads.forEach(athreads => athreads.renderFills(c))
+	//draw the rings
 	ringers.forEach(ringer => ringer.render(c))
-	connections.forEach(connections => connections.render(c))
+	//finally, draw the threads
+	threads.forEach(athreads => athreads.render(c))
 
 	cnv.style.cursor = hoveredRinger ? "pointer" : "default"
 	window.requestAnimationFrame(render)
