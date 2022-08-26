@@ -26,15 +26,17 @@ gui
 	.onChange(t => setup())
 	.name("multiple threads per ring")
 
-let colors = gui.addFolder("Colors")
+let colors = gui.addFolder("Rendering")
 colors.addColor(mainOpts, "background")
 colors.addColor(mainOpts, "stroke")
 colors.addColor(mainOpts, "circles")
-colors.add(mainOpts, "randomColors")
 colors.addColor(mainOpts, "intersections")
+
+colors.add(mainOpts, "lineWidth", 0.1, 15, 0.1)
+colors.add(mainOpts, "randomColors")
 colors.add(mainOpts, "evenOddFill")
 
-gui.add(window, "setup").name("Generate")
+gui.add(window, "setup").name("Generate new")
 
 /**
  * The rings around which the threads run
@@ -56,7 +58,7 @@ class Ringer {
 		}
 		let p = this.p.copy()
 		ct.fillStyle = mainOpts.randomColors ? this.color : mainOpts.circles
-		ct.lineWidth = 5
+		ct.lineWidth = mainOpts.lineWidth
 		ct.beginPath()
 		p.arc(ct, this.rad)
 		ct.fill()
