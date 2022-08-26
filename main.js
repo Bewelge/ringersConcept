@@ -79,11 +79,15 @@ class Thread {
 	containsRinger(ringer) {
 		return this.ringers.indexOf(ringer) >= 0
 	}
+	/**
+	 * Recursively add ringers to this Thread
+	 **/
 	propagate() {
-		//Recursively add ringers to this Thread
+		//filter out any candidates for the next ringer that are already included in this thread
 		let pool = ringers.filter(ringer => !this.containsRinger(ringer))
 
 		if (!mainOpts.multiThreaded) {
+			//remove all candidates that are included in any existing threads.
 			pool = pool.filter(
 				ringer =>
 					threads.find(thread => thread.containsRinger(ringer)) == undefined
@@ -122,7 +126,7 @@ class Thread {
 			pts[0][0].moveTo(ct)
 			pts.flatMap(ptPair => ptPair).forEach(pt => pt.lineTo(ct))
 
-			//Make the background fill also extend to the edge of the circle. Otherwise it looks weird.
+			//Make the background fill also extend to the edge of the last&first circle. Otherwise it looks weird.
 			if (this.ringers.length > 1) {
 				let firstR = this.ringers[0]
 				let lastR = this.ringers[this.ringers.length - 1]
@@ -141,13 +145,13 @@ class Thread {
 		ct.lineWidth = mainOpts.lineWidth
 		ct.strokeStyle = mainOpts.stroke
 		let pts = this.getThreadPoints()
+		ct.beginPath()
 		pts.forEach(ptPair => {
-			ct.beginPath()
 			ptPair[0].moveTo(ct)
 			ptPair[1].lineTo(ct)
-			ct.stroke()
-			ct.closePath()
 		})
+		ct.stroke()
+		ct.closePath()
 	}
 }
 
@@ -200,69 +204,3 @@ function render() {
 }
 render()
 setup()
-
-window.addEventListener("mousemove", ev => {
-	setMouse(ev)
-	setHovered()
-	if (grabbedRinger) {
-		grabbedRinger.p = mouse
-	}
-})
-var hasDeletedThisClick = false
-window.addEventListener("touchmove", ev => {
-	setMouse(ev)
-	setHovered()
-	if (grabbedRinger) {
-		grabbedRinger.p = mouse
-	}
-})
-
-window.addEventListener("mousedown", ev => {
-	setMouse(ev)
-	setHovered()
-
-	if (hoveredRinger && !grabbedRinger) {
-		grabbedRinger = hoveredRinger
-	}
-})
-var touches = []
-window.addEventListener("touchstart", ev => {
-	if (ev.touches.length > 1) ev.preventDefault()
-	setMouse(ev)
-	setHovered()
-	if (hoveredRinger && !grabbedRinger) {
-		grabbedRinger = hoveredRinger
-	}
-})
-window.addEventListener("mouseup", ev => {
-	setMouse(ev)
-	setHovered()
-	grabbedRinger = null
-})
-window.addEventListener("touchend", ev => {
-	setHovered()
-	grabbedRinger = null
-})
-
-function setMouse(ev) {
-	let rect = cnv.getBoundingClientRect()
-	let el = ev.touches ? ev.touches[ev.touches.length - 1] : ev
-	let top = rect.top
-
-	let y = el.clientY
-	if (rect.width < rect.height) {
-		top = (rect.height - rect.width) / 2
-		y = el.clientY - top
-	}
-	mouse = new Vec2(el.clientX - rect.left, el.clientY - top).multiply(
-		width / rect.width
-	)
-	return rect
-}
-function setHovered() {
-	hoveredRinger = null
-	let found = ringers.find(ringer => ringer.p.distanceTo(mouse) < ringer.rad)
-	if (found) {
-		hoveredRinger = found
-	}
-}
