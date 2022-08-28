@@ -688,3 +688,68 @@ class Rect {
 		return !doesntOverlap
 	}
 }
+
+/**
+ * FROM https://stackoverflow.com/questions/9043805/test-if-two-lines-intersect-javascript-function
+ */
+function linesIntersect(p0, p1, p2, p3) {
+	var det, gamma, lambda
+	det = (p1.x - p0.x) * (p3.y - p2.y) - (p3.x - p2.x) * (p1.y - p0.y)
+	if (det === 0) {
+		return false
+	} else {
+		lambda =
+			((p3.y - p2.y) * (p3.x - p0.x) + (p2.x - p3.x) * (p3.y - p0.y)) / det
+		gamma =
+			((p0.y - p1.y) * (p3.x - p0.x) + (p1.x - p0.x) * (p3.y - p0.y)) / det
+		return 0 < lambda && lambda < 1 && 0 < gamma && gamma < 1
+	}
+}
+/**
+ * END FROM https://stackoverflow.com/questions/9043805/test-if-two-lines-intersect-javascript-function
+ */
+
+/**
+ *
+ * FROM https://stackoverflow.com/questions/37224912/circle-line-segment-collision
+ */
+function inteceptCircleLineSeg(center, radius, p1, p2) {
+	var a, b, c, d, u1, u2, ret, retP1, retP2, v1, v2
+	v1 = {}
+	v2 = {}
+	v1.x = p2.x - p1.x
+	v1.y = p2.y - p1.y
+	v2.x = p1.x - center.x
+	v2.y = p1.y - center.y
+	b = v1.x * v2.x + v1.y * v2.y
+	c = 2 * (v1.x * v1.x + v1.y * v1.y)
+	b *= -2
+	d = Math.sqrt(b * b - 2 * c * (v2.x * v2.x + v2.y * v2.y - radius * radius))
+	if (isNaN(d)) {
+		// no intercept
+		return []
+	}
+	u1 = (b - d) / c // these represent the unit distance of point one and two on the line
+	u2 = (b + d) / c
+	retP1 = {} // return points
+	retP2 = {}
+	ret = [] // return array
+	if (u1 <= 1 && u1 >= 0) {
+		// add point if on the line segment
+		retP1.x = p1.x + v1.x * u1
+		retP1.y = p1.y + v1.y * u1
+		ret[0] = retP1
+	}
+	if (u2 <= 1 && u2 >= 0) {
+		// second add point if on the line segment
+		retP2.x = p1.x + v1.x * u2
+		retP2.y = p1.y + v1.y * u2
+		ret[ret.length] = retP2
+	}
+	return ret
+}
+
+/**
+ *
+ * END FROM https://stackoverflow.com/questions/37224912/circle-line-segment-collision
+ */
